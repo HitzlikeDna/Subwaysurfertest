@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Subway Runner</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111;
+            font-family: 'Orbitron', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 800px;
+            max-height: 600px;
+            box-shadow: 0 0 50px rgba(0, 255, 255, 0.2);
+            border: 2px solid #333;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #2b1055, #7597de);
+        }
+
+        /* UI Overlay Styles */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Klicks gehen durch */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        #scoreBoard {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: #fff;
+            text-shadow: 0 0 10px #0ff;
+        }
+
+        #startScreen, #gameOverScreen {
+            background: rgba(0, 0, 0, 0.85);
+            padding: 40px;
+            border-radius: 10px;
+            border: 2px solid #0ff;
+            pointer-events: auto; /* Buttons klickbar machen */
+            backdrop-filter: blur(5px);
+        }
+
+        h1 {
+            color: #f0f;
+            font-size: 48px;
+            margin: 0 0 20px 0;
+            text-shadow: 2px 2px 0px #0ff;
+            letter-spacing: 5px;
+        }
+
+        p {
+            color: #ddd;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 15px 40px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 24px;
+            background: linear-gradient(45deg, #f0f, #00f);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+        }
+
+        button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 40px rgba(255, 0, 255, 0.8);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+        
+        .controls-hint {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #888;
+        }
+        
+        .key {
+            display: inline-block;
+            background: #333;
+            padding: 5px 10px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            color: #fff;
+            margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <canvas id="gameCanvas"></canvas>
+    <div id="scoreBoard">SCORE: 0</div>
+
+    <div id="startScreen" class="ui-layer">
+        <h1>NEON RUNNER</h1>
+        <p>Weiche den Blöcken aus!</p>
+        <div class="controls-hint">
+            <span class="key">A</span> / <span class="key">D</span> = Spur wechseln<br>
+            <span class="key">W</span> = Springen
+        </div>
+        <button onclick="startGame()">START</button>
+    </div>
+
+    <div id="gameOverScreen" class="ui-layer hidden">
+        <h1>GAME OVER</h1>
+        <p id="finalScore">Score: 0</p>
+        <button onclick="resetGame()">RETRY</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Canvas Größe anpassen
+    function resize() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Spiel Status
+    let isPlaying = false;
+    let score = 0;
+    let gameSpeed = 1;
+    let frameCount = 0;
+
+    // Konstanten für Perspektive
+    const LANE_WIDTH_BOTTOM = 200; // Breite der Spur unten am Bildschirm
+    const LANE_WIDTH_TOP = 20;     // Breite der Spur am Horizont
+    const HORIZON_Y = 0.45;        // Wo der Horizont ist (Prozent der Höhe)
+
+    // Klassen
+    class Player {
+        constructor() {
+            this.lane = 0; // -1 (links), 0 (mitte), 1 (rechts)
+            this.targetLane = 0;
+            this.x = 0; // Interpolierte X-Position
+            this.y = 0; // Y-Position (für Sprung)
+            this.vy = 0; // Vertikale Geschwindigkeit
+            this.isJumping = false;
+            this.jumpForce = 25;
+            this.gravity = 1.2;
+            this.color = '#00ffcc';
+            this.width = 60;
+            this.height = 100;
+        }
+
+        update() {
+            // Horizontale Bewegung (Lerp für geschmeidiges Gleiten)
+            // Wir mappen lane (-1, 0, 1) auf eine X-Position
+            const laneWidth = canvas.width / 4; 
+            const targetX = this.targetLane * laneWidth * 0.5; // Einfache 2D Logik für X
+            this.x += (targetX - this.x) * 0.2;
+
+            // Sprung Physik
+            if (this.isJumping) {
+                this.y += this.vy;
+                this.vy -= this.gravity;
+                
+                if (this.y <= 0) {
+                    this.y = 0;
+                    this.isJumping = false;
+                    this.vy = 0;
+                }
+            }
+        }
+
+        draw() {
+            // Perspektivische Berechnung für den Spieler
+            // Der Spieler ist immer "vorne", also fast unten am Screen
+            const centerX = canvas.width / 2;
+            const bottomY = canvas.height - 50 - this.y;
+            
+            // Schatten
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(centerX + this.x, canvas.height - 40, 30, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Spieler Körper (einfacher "Robot" Style)
+            ctx.fillStyle = this.color;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            
+            const px = centerX + this.x - this.width/2;
+            const py = bottomY - this.height;
+
+            // Körper
+            ctx.fillRect(px, py, this.width, this.height);
+            ctx.strokeRect(px, py, this.width, this.height);
+            
+            // Augen / Visor
+            ctx.fillStyle = '#ff00ff';
+            ctx.fillRect(px + 10, py + 20, this.width - 20, 15);
+        }
+
+        move(dir) {
+            if (dir === 'left' && this.targetLane > -1) this.targetLane--;
+            if (dir === 'right' && this.targetLane < 1) this.targetLane++;
+        }
+
+        jump() {
+            if (!this.isJumping) {
+                this.isJumping = true;
+                this.vy = this.jumpForce;
+            }
+        }
+    }
+
+    class Obstacle {
+        constructor() {
+            this.lane = Math.floor(Math.random() * 3) - 1; // -1, 0, 1
+            this.z = 1000; // Tiefe (Startet weit weg)
+            this.type = Math.random() > 0.5 ? 'tall' : 'low'; // Hoch oder niedrig
+        }
+
+        update(speed) {
+            this.z -= speed * 10;
+        }
+
+        draw() {
+            if (this.z <= 0) return;
+
+            // Projektion: 3D Koordinaten zu 2D Screen
+            const perspective = 300 / (300 + this.z); // Skalierungsfaktor
+            
+            const centerY = canvas.height * HORIZON_Y;
+            const centerX = canvas.width / 2;
+
+            // Position berechnen
+            // Spurbreite wächst, je näher das Objekt kommt
+            const laneSpacing = (canvas.width * 2) * perspective;
+            const ox = centerX + (this.lane * laneSpacing * 0.5);
+            const oy = centerY + ((canvas.height - centerY) * perspective * 0.8) + (canvas.height * 0.2); 
+
+            // Größe berechnen
+            const w = 80 * perspective;
+            const h = (this.type === 'tall' ? 120 : 60) * perspective;
+
+            // Zeichnen (Pseudo-3D Block)
+            const drawX = ox - w / 2;
+            const drawY = canvas.height - (canvas.height - oy) - h; // Bodenhaftung korrigieren
+
+            // Wenn Objekt hinter Kamera ist oder zu hoch, nicht zeichnen
+            if (perspective > 1.5 || this.z < 10) return;
+
+            // Farben
+            ctx.fillStyle = '#ff3333'; // Front
+            ctx.fillRect(drawX, drawY, w, h);
+            
+            // Top Face (für 3D Look)
+            ctx.fillStyle = '#cc0000';
+            ctx.beginPath();
+            ctx.moveTo(drawX, drawY);
+            ctx.lineTo(drawX + w, drawY);
+            ctx.lineTo(drawX + w * 0.9, drawY - w * 0.3);
+            ctx.lineTo(drawX + w * 0.1, drawY - w * 0.3);
+            ctx.fill();
+            
+            // Side Face
+            ctx.fillStyle = '#990000';
+            if (this.lane < 0) { // Rechte Seite sichtbar wenn links
+                 ctx.beginPath();
+                 ctx.moveTo(drawX + w, drawY);
+                 ctx.lineTo(drawX + w * 0.9, drawY - w * 0.3);
+                 ctx.lineTo(drawX + w * 0.9, drawY + h - w * 0.3);
+                 ctx.lineTo(drawX + w, drawY + h);
+                 ctx.fill();
+            } else if (this.lane > 0) { // Linke Seite sichtbar wenn rechts
+                 ctx.beginPath();
+                 ctx.moveTo(drawX, drawY);
+                 ctx.lineTo(drawX + w * 0.1, drawY - w * 0.3);
+                 ctx.lineTo(drawX + w * 0.1, drawY + h - w * 0.3);
+                 ctx.lineTo(drawX, drawY + h);
+                 ctx.fill();
+            }
+        }
+
+        checkCollision(player) {
+            // Z-Kollision (wenn Objekt nah genug ist)
+            // Wir nehmen an, dass Z < 60 die "Hit-Zone" ist
+            if (this.z < 80 && this.z > 0) {
+                // Spur muss übereinstimmen
+                // Wir runden player.x grob zur Spur, da er gleitet
+                // Aber einfacher: wir prüfen targetLane vs object lane
+                if (player.targetLane === this.lane) {
+                    
+                    // Y-Kollision (Springen über niedrige Hindernisse)
+                    if (this.type === 'low' && player.y > 60) {
+                        return false; // Drüber gesprungen
+                    }
+                    return true; // Crash
+                }
+            }
+            return false;
+        }
+    }
+
+    // Spiel Variablen
+    let player;
+    let obstacles = [];
+    let animationId;
+
+    function startGame() {
+        document.getElementById('startScreen').classList.add('hidden');
+        document.getElementById('gameOverScreen').classList.add('hidden');
+        
+        player = new Player();
+        obstacles = [];
+        score = 0;
+        gameSpeed = 1.0;
+        isPlaying = true;
+        
+        animate();
+    }
+
+    function resetGame() {
+        startGame();
+    }
+
+    function gameOver() {
+        isPlaying = false;
+        cancelAnimationFrame(animationId);
+        document.getElementById('gameOverScreen').classList.remove('hidden');
+        document.getElementById('finalScore').innerText = "Score: " + Math.floor(score);
+    }
+
+    function drawBackground() {
+        // Horizont Linie
+        const hY = canvas.height * HORIZON_Y;
+        
+        // Boden Grid - Cyberpunk Style
+        ctx.fillStyle = '#1a0b2e'; // Dunkler Boden
+        ctx.fillRect(0, hY, canvas.width, canvas.height - hY);
+
+        // Bewegliche Gitterlinien für Speed-Effekt
+        ctx.strokeStyle = '#f0f';
+        ctx.lineWidth = 1;
+        
+        const centerX = canvas.width / 2;
+        
+        // Vertikale Linien (Spuren)
+        for(let i = -3; i <= 3; i++) {
+            ctx.beginPath();
+            ctx.moveTo(centerX, hY);
+            // Strahlensatz für Perspektive
+            const xBottom = centerX + (i * canvas.width * 0.4); 
+            ctx.lineTo(xBottom, canvas.height);
+            ctx.stroke();
+        }
+
+        // Horizontale Linien (Scrollen)
+        let offset = (frameCount * gameSpeed * 5) % 100;
+        for(let i = 0; i < 10; i++) {
+            let y = hY + Math.pow(i / 10, 2) * (canvas.height - hY); // Exponentiell für Tiefe
+            // Kleiner Offset für Animation
+             // (Dies ist eine vereinfachte Animation, mathematisch nicht 100% korrekt aber sieht gut aus)
+        }
+    }
+
+    function animate() {
+        if (!isPlaying) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Update Logik
+        score += 0.1 * gameSpeed;
+        gameSpeed += 0.0005; // Langsam schneller werden
+        frameCount++;
+
+        document.getElementById('scoreBoard').innerText = "SCORE: " + Math.floor(score);
+
+        // Hintergrund
+        drawBackground();
+
+        // Hindernisse Spawnen
+        if (frameCount % Math.floor(60 / gameSpeed) === 0) {
+            obstacles.push(new Obstacle());
+        }
+
+        // Hindernisse zeichnen & Logik (von hinten nach vorne sortieren für korrekte Überdeckung)
+        obstacles.sort((a, b) => b.z - a.z);
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let obs = obstacles[i];
+            obs.update(gameSpeed);
+            obs.draw();
+
+            if (obs.checkCollision(player)) {
+                gameOver();
+            }
+
+            // Entfernen wenn hinter Kamera
+            if (obs.z < -200) {
+                obstacles.splice(i, 1);
+            }
+        }
+
+        // Spieler
+        player.update();
+        player.draw();
+
+        animationId = requestAnimationFrame(animate);
+    }
+
+    // Input Handling
+    window.addEventListener('keydown', (e) => {
+        if (!isPlaying && (e.code === 'Space' || e.code === 'Enter')) {
+            if(!document.getElementById('startScreen').classList.contains('hidden')) startGame();
+            if(!document.getElementById('gameOverScreen').classList.contains('hidden')) resetGame();
+        }
+
+        if (!isPlaying) return;
+
+        switch(e.code) {
+            case 'KeyA':
+            case 'ArrowLeft':
+                player.move('left');
+                break;
+            case 'KeyD':
+            case 'ArrowRight':
+                player.move('right');
+                break;
+            case 'KeyW':
+            case 'ArrowUp':
+            case 'Space':
+                player.jump();
+                break;
+            case 'KeyS':
+            case 'ArrowDown':
+                // Optional: Rollen/Ducken
+                break;
+        }
+    });
+
+</script>
+</body>
+</html>
