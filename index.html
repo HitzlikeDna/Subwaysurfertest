@@ -3,74 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Subway Runner</title>
+    <title>Neon Runner JS</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
         
+        <div class="scanlines"></div>
+
         <div id="ui-layer">
             <div id="menu-screen" class="overlay active">
-                <h1>SUBWAY RUNNER</h1>
+                <h1 class="glitch-text">NEON RUNNER</h1>
                 <div class="menu-buttons">
-                    <button id="start-btn">PLAY</button>
-                    <button id="skins-btn">SKINS</button>
-                    <button id="settings-btn">SETTINGS</button>
+                    <button id="start-btn">INITIALIZE RUN</button>
+                    <button id="skins-btn">SELECT AVATAR</button>
+                    <button id="settings-btn">SYSTEM SETTINGS</button>
                 </div>
-                <div class="high-score-display">HIGHSCORE: <span id="high-score-val">0</span></div>
+                <div class="high-score-display">BEST DISTANCE: <span id="high-score-val">0</span>m</div>
             </div>
 
             <div id="hud" class="overlay">
                 <div class="stats-top">
                     <div class="score-box">SCORE: <span id="score-val">0</span></div>
-                    <div class="coin-box">COINS: <span id="coins-val">0</span></div>
+                    <div class="coin-box">DATA CHIPS: <span id="coins-val">0</span></div>
                 </div>
+                <div id="speed-indicator">SPEED: <span id="speed-val">100</span>%</div>
                 <div id="powerup-timers"></div>
-                <div id="mission-toast"></div>
             </div>
 
             <div id="pause-screen" class="overlay">
-                <h2>PAUSED</h2>
+                <h2>SYSTEM PAUSED</h2>
                 <button id="resume-btn">RESUME</button>
-                <button id="restart-btn-p">RESTART</button>
-                <button id="menu-btn-p">QUIT</button>
+                <button id="restart-btn-p">REBOOT</button>
+                <button id="menu-btn-p">EXIT</button>
             </div>
 
             <div id="gameover-screen" class="overlay">
-                <h2>CRASHED!</h2>
+                <h2 class="glitch-text" style="color: var(--accent);">CRITICAL FAILURE</h2>
                 <div class="final-stats">
-                    <p>SCORE: <span id="final-score">0</span></p>
-                    <p>COINS: <span id="final-coins">0</span></p>
+                    <p>FINAL SCORE: <span id="final-score">0</span></p>
+                    <p>CHIPS COLLECTED: <span id="final-coins">0</span></p>
                 </div>
-                <button id="retry-btn">TRY AGAIN</button>
-                <button id="menu-btn-g">MENU</button>
+                <button id="retry-btn">RETRY RUN</button>
+                <button id="menu-btn-g">MAIN MENU</button>
             </div>
 
             <div id="skin-screen" class="overlay">
-                <h2>SELECT SKIN</h2>
+                <h2>SELECT AVATAR COLOR</h2>
                 <div id="skin-list"></div>
                 <button id="back-skins-btn">BACK</button>
             </div>
 
             <div id="settings-screen" class="overlay">
-                <h2>SETTINGS</h2>
+                <h2>SYSTEM SETTINGS</h2>
                 <div class="setting-item">
                     <label>SFX VOLUME</label>
                     <input type="range" id="volume-sfx" min="0" max="1" step="0.1" value="0.5">
                 </div>
                 <div class="setting-item">
-                    <label>TUTORIAL</label>
+                    <label>SHOW TUTORIAL</label>
                     <input type="checkbox" id="tutorial-toggle" checked>
                 </div>
-                <button id="reset-progress">RESET ALL DATA</button>
+                <button id="reset-progress" style="background: var(--accent);">WIPE MEMORY</button>
                 <button id="back-settings-btn">BACK</button>
             </div>
             
             <div id="tutorial-overlay" class="overlay">
                 <div class="tutorial-box">
-                    <p>SWIPE or ARROWS to MOVE</p>
-                    <p>UP to JUMP | DOWN to SLIDE</p>
+                    <p>◀ ▶ SWIPE / ARROWS TO STRAFE</p>
+                    <p>▲ JUMP | ▼ SLIDE</p>
+                    <p>AVOID RED DATA | COLLECT BLUE CHIPS</p>
                 </div>
             </div>
         </div>
