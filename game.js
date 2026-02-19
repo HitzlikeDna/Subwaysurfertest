@@ -1,4 +1,3 @@
-
 const CONFIG = {
     laneWidth: 120,
     baseSpeed: 8,
