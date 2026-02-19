@@ -2,214 +2,80 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Subway Runner</title>
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #222;
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-        #game-container {
-            position: relative;
-            width: 400px;
-            height: 600px;
-            background: linear-gradient(#444, #222);
-            border: 4px solid #555;
-            overflow: hidden;
-        }
-        canvas {
-            display: block;
-        }
-        #ui {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            font-size: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            pointer-events: none;
-        }
-        #game-over {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 20px;
-            text-align: center;
-            border-radius: 10px;
-            display: none;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background: #f0ad4e;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            margin-top: 10px;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Subway Runner JS</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <div id="menu-screen" class="overlay active">
+                <h1>SUBWAY RUNNER</h1>
+                <div class="menu-buttons">
+                    <button id="start-btn">PLAY</button>
+                    <button id="skins-btn">SKINS</button>
+                    <button id="settings-btn">SETTINGS</button>
+                </div>
+                <div class="high-score-display">HIGHSCORE: <span id="high-score-val">0</span></div>
+            </div>
 
-<div id="game-container">
-    <canvas id="gameCanvas"></canvas>
-    <div id="ui">Score: <span id="scoreVal">0</span></div>
-    <div id="game-over">
-        <h1>GAME OVER</h1>
-        <p>Score: <span id="finalScore">0</span></p>
-        <button onclick="resetGame()">Neu starten</button>
+            <div id="hud" class="overlay">
+                <div class="stats-top">
+                    <div class="score-box">SCORE: <span id="score-val">0</span></div>
+                    <div class="coin-box">COINS: <span id="coins-val">0</span></div>
+                </div>
+                <div id="powerup-timers"></div>
+                <div id="mission-toast"></div>
+            </div>
+
+            <div id="pause-screen" class="overlay">
+                <h2>PAUSED</h2>
+                <button id="resume-btn">RESUME</button>
+                <button id="restart-btn-p">RESTART</button>
+                <button id="menu-btn-p">QUIT</button>
+            </div>
+
+            <div id="gameover-screen" class="overlay">
+                <h2>CRASHED!</h2>
+                <div class="final-stats">
+                    <p>SCORE: <span id="final-score">0</span></p>
+                    <p>COINS: <span id="final-coins">0</span></p>
+                </div>
+                <button id="retry-btn">TRY AGAIN</button>
+                <button id="menu-btn-g">MENU</button>
+            </div>
+
+            <div id="skin-screen" class="overlay">
+                <h2>SELECT SKIN</h2>
+                <div id="skin-list"></div>
+                <button id="back-skins-btn">BACK</button>
+            </div>
+
+            <div id="settings-screen" class="overlay">
+                <h2>SETTINGS</h2>
+                <div class="setting-item">
+                    <label>SFX VOLUME</label>
+                    <input type="range" id="volume-sfx" min="0" max="1" step="0.1" value="0.5">
+                </div>
+                <div class="setting-item">
+                    <label>TUTORIAL</label>
+                    <input type="checkbox" id="tutorial-toggle" checked>
+                </div>
+                <button id="reset-progress">RESET ALL DATA</button>
+                <button id="back-settings-btn">BACK</button>
+            </div>
+            
+            <div id="tutorial-overlay" class="overlay">
+                <div class="tutorial-box">
+                    <p>SWIPE or ARROWS to MOVE</p>
+                    <p>UP to JUMP | DOWN to SLIDE</p>
+                </div>
+            </div>
+        </div>
+        <div id="debug-info"></div>
     </div>
-</div>
-
-<script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    const scoreElement = document.getElementById('scoreVal');
-    const finalScoreElement = document.getElementById('finalScore');
-    const gameOverScreen = document.getElementById('game-over');
-
-    canvas.width = 400;
-    canvas.height = 600;
-
-    const LANE_WIDTH = canvas.width / 3;
-    let gameActive = true;
-    let score = 0;
-    let speed = 5;
-
-    let player = {
-        lane: 1,
-        y: 500,
-        width: 50,
-        height: 80,
-        targetX: LANE_WIDTH + (LANE_WIDTH - 50) / 2,
-        currentX: LANE_WIDTH + (LANE_WIDTH - 50) / 2,
-        jumpY: 0,
-        isJumping: false
-    };
-
-    let obstacles = [];
-
-    function spawnObstacle() {
-        const lane = Math.floor(Math.random() * 3);
-        obstacles.push({
-            x: lane * LANE_WIDTH + (LANE_WIDTH - 60) / 2,
-            y: -150,
-            width: 60,
-            height: 120,
-            color: '#d9534f'
-        });
-    }
-
-    window.addEventListener('keydown', (e) => {
-        if (!gameActive) return;
-
-        if ((e.key === 'a' || e.key === 'A') && player.lane > 0) {
-            player.lane--;
-        } else if ((e.key === 'd' || e.key === 'D') && player.lane < 2) {
-            player.lane++;
-        } else if ((e.key === 'w' || e.key === 'W') && !player.isJumping) {
-            player.isJumping = true;
-            let jumpHeight = 0;
-            let up = true;
-            let jumpInterval = setInterval(() => {
-                if (up) {
-                    jumpHeight += 5;
-                    if (jumpHeight >= 100) up = false;
-                } else {
-                    jumpHeight -= 5;
-                    if (jumpHeight <= 0) {
-                        jumpHeight = 0;
-                        player.isJumping = false;
-                        clearInterval(jumpInterval);
-                    }
-                }
-                player.jumpY = jumpHeight;
-            }, 10);
-        }
-        player.targetX = player.lane * LANE_WIDTH + (LANE_WIDTH - player.width) / 2;
-    });
-
-    function resetGame() {
-        score = 0;
-        speed = 5;
-        player.lane = 1;
-        player.currentX = LANE_WIDTH + (LANE_WIDTH - 50) / 2;
-        player.targetX = player.currentX;
-        obstacles = [];
-        gameActive = true;
-        gameOverScreen.style.display = 'none';
-        scoreElement.innerText = "0";
-        update();
-    }
-
-    function update() {
-        if (!gameActive) return;
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        ctx.strokeStyle = '#555';
-        ctx.lineWidth = 2;
-        for (let i = 1; i < 3; i++) {
-            ctx.beginPath();
-            ctx.moveTo(i * LANE_WIDTH, 0);
-            ctx.lineTo(i * LANE_WIDTH, canvas.height);
-            ctx.stroke();
-        }
-
-        player.currentX += (player.targetX - player.currentX) * 0.2;
-
-        ctx.fillStyle = '#5bc0de';
-        ctx.fillRect(player.currentX, player.y - player.jumpY, player.width, player.height);
-        ctx.fillStyle = '#333';
-        ctx.fillRect(player.currentX + 5, player.y - player.jumpY + 10, 10, 10);
-        ctx.fillRect(player.currentX + player.width - 15, player.y - player.jumpY + 10, 10, 10);
-
-        if (Math.random() < 0.02) spawnObstacle();
-
-        for (let i = obstacles.length - 1; i >= 0; i--) {
-            let o = obstacles[i];
-            o.y += speed;
-
-            ctx.fillStyle = o.color;
-            ctx.fillRect(o.x, o.y, o.width, o.height);
-            ctx.fillStyle = '#999';
-            ctx.fillRect(o.x, o.y + 10, o.width, 10);
-
-            if (
-                !player.isJumping &&
-                player.currentX < o.x + o.width &&
-                player.currentX + player.width > o.x &&
-                player.y < o.y + o.height &&
-                player.y + player.height > o.y
-            ) {
-                gameActive = false;
-                gameOverScreen.style.display = 'block';
-                finalScoreElement.innerText = Math.floor(score);
-            }
-
-            if (o.y > canvas.height) {
-                obstacles.splice(i, 1);
-                score += 10;
-                speed += 0.05;
-                scoreElement.innerText = Math.floor(score);
-            }
-        }
-
-        requestAnimationFrame(update);
-    }
-
-    update();
-</script>
-
+    <script src="game.js"></script>
 </body>
 </html>
